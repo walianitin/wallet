@@ -20,92 +20,108 @@ const signinBody=zod.object({
 
 const signupBody= zod.object(
     {
-        username: zod.string().email(),
-        firstname: zod.string(),
-        lastname: zod.string(),
-        password: zod.string()
 
+        firstname: zod.string().min(1),
+        lastname: zod.string().min(1),
+        username: zod.string().email(),
+        password: zod.string().min(1)
     }
 )
+userRouter.post("/signup", async (req, res) => {
+    try {
+        const result = await signupBody.safeParse(req.body);
 
-userRouter.post("/signup",async (req,res)=>
-{
-        const {success}= signupBody.safeParse(req.body);
-        if(!success)
-        {
-            return res.status(411).json({
-                message: "Email already taken / Incorrect inputs"
-            })
-        }
-        
-        const existingUser= await User.findOne({
-            username: req.body.username
-        })
-        if(existingUser)
-        {
-            return res.status(411).json({
-                message: "exiting users val error"
-            })
+
+        if (!result.success) {
+            console.log("Zod validation error:", result.error.issues);
+            return res.status(400).json({
+                message: "Incorrect inputs",
+                details: result.error.issues
+            });
         }
 
-        const user=await User.create({
-            username: req.body.username,
-            password: req.body.password,
-            firstname: req.body.firstname,
-            lastname: req.body.lastname,
-        })
-        const userId=user._id;
+        const { username, password, firstname, lastname } = result.data;
+
+
+        if (!username) {
+            return res.status(400).json({
+                message: "Email is required"
+            });
+        }
+
+
+        const existingUser = await User.findOne({ username: username });
+        if (existingUser) {
+            return res.status(409).json({
+                message: "Username is already taken"
+            });
+        }
+
+
+        const user = await User.create({
+            username: username,
+            password: password,
+            firstname: firstname,
+            lastname: lastname,
+        });
+
+        const userId = user._id;
+
 
         await Account.create({
             userId,
             balance: 1 + Math.random() * 10000
-        })
+        });
 
-        const token=jwt.sign({
-            userId
-        },JWT_SECRET)
 
-        res.json(
-            {
-                message:"user created successfully",
-                token:token
-            }
-        )
+        const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: "1h" });
 
-} );
 
-userRouter.post("/signin",async (req,res)=>
-{
-    const {success}=signinBody.safeParse(req.body);
-    if(!success)
-    {
-        return res.status(411).json({
-            message: "Incorrect inputs"
-        })
+        res.status(201).json({
+            message: "User created successfully",
+            token: token,
+        });
+    } catch (err) {
+        console.error("Error in signup route:", err.message, err.stack); // Detailed error logging
+        res.status(500).json({
+            message: "Internal server error"
+        });
     }
-    const user=await User.findOne(
-        {
-            username: req.body.username,
-            password: req.body.password
+});
+
+userRouter.post('/signin', async (req, res) => {
+    try{
+        const { success, data } = await signinBody.safeParseAsync(req.body);
+        if (!success) {
+            return res.status(400).json({
+                message: 'Incorrect inputs',
+                details: data.issues,
+            });
         }
-    )
 
-    if(user)
-    {
-        const token=jwt.sign(
-            {
-                userId:user._id
-            },JWT_SECRET
-        )
-        res.send({
-            token:token
-        })
-        return
+        const user = await User.findOne({
+            username: data.username,
+            password: data.password,
+        });
+
+        if (user) {
+            const token = jwt.sign({ userId: user._id }, JWT_SECRET, {
+                expiresIn: '1h',
+            });
+            res.json({ token });
+        } else {
+            res.status(401).json({
+                message: 'Invalid username or password',
+            });
+        }
+    } catch (err){
+        console.error("Error in siginin route:", err.message, err.stack);
+        res.status(500).json({
+            message: "Internal server error"
+        });
     }
-    res.status(411).json({
-        message: "Error while logging in"
-    })
-})
+
+});
 userRouter.put('/',authMiddleware,async (req,res)=>{
 
     const {success}=updateBody.safeParse(req.body);   

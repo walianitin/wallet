@@ -1,4 +1,4 @@
 //backend/config.js
 module.exports = {
-	JWT_SECRET: "nitin-walia"
+	JWT_SECRET:"nitin-walia"
 }
